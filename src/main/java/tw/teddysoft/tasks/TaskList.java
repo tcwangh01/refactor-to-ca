@@ -1,22 +1,26 @@
 package tw.teddysoft.tasks;
 
+import tw.teddysoft.tasks.adapter.ToDoListInMemoryRepository;
+import tw.teddysoft.tasks.entity.*;
+import tw.teddysoft.tasks.usecase.Execute;
+import tw.teddysoft.tasks.usecase.port.out.ToDoListRepository;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 
 public final class TaskList implements Runnable {
     private static final String QUIT = "quit";
 
-    private final Map<String, List<Task>> tasks = new LinkedHashMap<>();
+
+    public static String DEFAULT_TO_DO_LIST_ID = "001";
+    private final ToDoList toDoList = new ToDoList(ToDoListId.of(DEFAULT_TO_DO_LIST_ID));
     private final BufferedReader in;
     private final PrintWriter out;
-
     private long lastId = 0;
+    private final ToDoListRepository repository;
+
 
     public static void main(String[] args) throws Exception {
         BufferedReader in = new BufferedReader(new InputStreamReader(System.in));
@@ -27,6 +31,9 @@ public final class TaskList implements Runnable {
     public TaskList(BufferedReader reader, PrintWriter writer) {
         this.in = reader;
         this.out = writer;
+        repository = new ToDoListInMemoryRepository();
+        if (repository.findById(ToDoListId.of(DEFAULT_TO_DO_LIST_ID)).isEmpty())
+            repository.save(toDoList);
     }
 
     public void run() {
@@ -42,16 +49,17 @@ public final class TaskList implements Runnable {
             if (command.equals(QUIT)) {
                 break;
             }
-            execute(command);
+            new Execute(toDoList,out,repository).execute(command);
+            //execute(command);
         }
     }
-
+    /*
     private void execute(String commandLine) {
         String[] commandRest = commandLine.split(" ", 2);
         String command = commandRest[0];
         switch (command) {
             case "show":
-                show();
+                new Show(toDoList,out).show();
                 break;
             case "add":
                 add(commandRest[1]);
@@ -72,10 +80,10 @@ public final class TaskList implements Runnable {
     }
 
     private void show() {
-        for (Map.Entry<String, List<Task>> project : tasks.entrySet()) {
-            out.println(project.getKey());
-            for (Task task : project.getValue()) {
-                out.printf("    [%c] %d: %s%n", (task.isDone() ? 'x' : ' '), task.getId(), task.getDescription());
+        for (Project project : toDoList.getProjects()) {
+            out.println(project.getName());
+            for (Task task : project.getTasks()) {
+                out.printf("    [%c] %s: %s%n", (task.isDone() ? 'x' : ' '), task.getId(), task.getDescription());
             }
             out.println();
         }
@@ -93,17 +101,18 @@ public final class TaskList implements Runnable {
     }
 
     private void addProject(String name) {
-        tasks.put(name, new ArrayList<Task>());
+        toDoList.addProject(name, new ArrayList<Task>());
     }
 
     private void addTask(String project, String description) {
-        List<Task> projectTasks = tasks.get(project);
+        List<Task> projectTasks = toDoList.getTasks(ProjectName.of(project));
         if (projectTasks == null) {
             out.printf("Could not find a project with the name \"%s\".", project);
             out.println();
             return;
         }
-        projectTasks.add(new Task(nextId(), description, false));
+        toDoList.addTask(ProjectName.of(project),description,false);
+        //projectTasks.add(new Task(TaskId.of(nextId()), description, false));
     }
 
     private void check(String idString) {
@@ -115,16 +124,19 @@ public final class TaskList implements Runnable {
     }
 
     private void setDone(String idString, boolean done) {
-        int id = Integer.parseInt(idString);
-        for (Map.Entry<String, List<Task>> project : tasks.entrySet()) {
-            for (Task task : project.getValue()) {
-                if (task.getId() == id) {
-                    task.setDone(done);
+        TaskId taskId = TaskId.of(idString);
+
+        for (Project project : toDoList.getProjects()) {
+            for (Task task : project.getTasks()) {
+                if (task.getId().equals(taskId)) {
+                    //task.setDone(done);
+                    toDoList.setDone(taskId,done);
                     return;
                 }
             }
         }
-        out.printf("Could not find a task with an ID of %d.", id);
+
+        out.printf("Could not find a task with an ID of %s.", taskId);
         out.println();
     }
 
@@ -142,6 +154,8 @@ public final class TaskList implements Runnable {
         out.printf("I don't know what the command \"%s\" is.", command);
         out.println();
     }
+
+     */
 
     private long nextId() {
         return ++lastId;
